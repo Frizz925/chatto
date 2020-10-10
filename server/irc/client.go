@@ -8,16 +8,14 @@ import (
 	"io"
 	"strings"
 	"sync"
-
-	log "github.com/sirupsen/logrus"
 )
+
+type HandlerFunc func(Event)
 
 var (
 	ErrAlreadyConnected = errors.New("already connected")
 	ErrNotConnected     = errors.New("not connected")
 )
-
-type HandlerFunc func(Event)
 
 type Config struct {
 	Nick  string
@@ -29,7 +27,8 @@ type Client struct {
 	*Commands
 	stream *stream.Stream
 
-	cfg Config
+	cfg  Config
+	nick string
 
 	out    chan string
 	cancel context.CancelFunc
@@ -69,13 +68,37 @@ func (c *Client) Connect(ctx context.Context, rw io.ReadWriter) error {
 	if err := c.init(rw); err != nil {
 		return err
 	}
+
 	c.stream.Open()
-	if err := c.Nick(ctx, c.cfg.Nick); err != nil {
-		return err
+	ch := make(chan bool)
+	obs := c.Each(ctx, RAW, func(e Event) {
+		switch e.Message.Cmd {
+		case "001":
+			ch <- true
+		case ERR_NICKNAMEINUSE:
+			ch <- false
+		}
+	})
+	defer obs.Remove()
+
+	nick := c.cfg.Nick
+	for {
+		if err := c.Nick(ctx, nick); err != nil {
+			return err
+		}
+		if err := c.User(ctx, c.cfg.Ident, c.cfg.Name); err != nil {
+			return err
+		}
+		if <-ch {
+			break
+		}
+		nick = nick + "_"
 	}
-	if err := c.User(ctx, c.cfg.Ident, c.cfg.Name); err != nil {
-		return err
-	}
+
+	c.mu.Lock()
+	c.nick = nick
+	c.mu.Unlock()
+
 	c.notify(CONNECTED)
 	return nil
 }
@@ -125,12 +148,7 @@ func (c *Client) init(rw io.ReadWriter) error {
 	c.wg.Add(2)
 	go c.recv(ctx, rw)
 	go c.send(ctx, rw)
-
-	c.Each(ctx, PING, func(e Event) {
-		if err := e.Client.Pong(ctx, c.cfg.Nick); err != nil {
-			log.Errorf("Error replying PING: %+v", err)
-		}
-	})
+	registerInternalHandlers(ctx, c)
 
 	c.connected = true
 	return nil
@@ -201,6 +219,7 @@ func (c *Client) send(ctx context.Context, w io.Writer) {
 
 func (c *Client) handleLine(line string) {
 	msg := parseLine(line)
+	c.notify(RAW, msg)
 	if msg.Cmd != "" {
 		c.notify(msg.Cmd, msg)
 	}

@@ -1,18 +1,24 @@
 package irc
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 type Message struct {
-	Src               string
-	Nick, Ident, Host string
-	Cmd               string
-	Args              []string
+	Nick, Ident, Host, Src string
+	Raw, Cmd               string
+	Args                   []string
+	Time                   time.Time
 }
 
 func parseLine(s string) (msg Message) {
+	msg.Time = time.Now()
+
 	if s == "" {
 		return msg
 	}
+	msg.Raw = s
 
 	if s[0] == ':' {
 		if idx := strings.Index(s, " "); idx != -1 {

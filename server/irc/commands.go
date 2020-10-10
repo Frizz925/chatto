@@ -20,6 +20,7 @@ const (
 	PING         = "PING"
 	PONG         = "PONG"
 	QUIT         = "QUIT"
+	RAW          = "RAW"
 )
 
 type Commands struct {

@@ -55,7 +55,7 @@ func (o *Observable) Each(ctx context.Context, handler ObserverFunc) *Observer {
 		for {
 			select {
 			case item := <-ch:
-				handler(item)
+				go handler(item)
 			case <-loopCtx.Done():
 				return
 			}

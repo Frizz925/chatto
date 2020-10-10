@@ -13,7 +13,9 @@ func TestMessage(t *testing.T) {
 
 	// Parse JOIN message
 	{
-		msg := parseLine(":chatto!~chatto-irc@9qt4sazudxvsk.irc JOIN #chatto")
+		line := ":chatto!~chatto-irc@9qt4sazudxvsk.irc JOIN #chatto"
+		msg := parseLine(line)
+		assert.Equal(line, msg.Raw)
 		assert.Equal("chatto!~chatto-irc@9qt4sazudxvsk.irc", msg.Src)
 		assert.Equal("chatto", msg.Nick)
 		assert.Equal("~chatto-irc", msg.Ident)
@@ -25,7 +27,9 @@ func TestMessage(t *testing.T) {
 
 	// Parse ERROR message
 	{
-		msg := parseLine("ERROR :Ping timeout: 2m30s")
+		line := "ERROR :Ping timeout: 2m30s"
+		msg := parseLine(line)
+		assert.Equal(line, msg.Raw)
 		assert.Empty(msg.Src)
 		assert.Equal("ERROR", msg.Cmd)
 		require.GreaterOrEqual(len(msg.Args), 1)
@@ -34,7 +38,9 @@ func TestMessage(t *testing.T) {
 
 	// Parse QUIT message
 	{
-		msg := parseLine(":chatto!~chatto-irc@9qt4sazudxvsk.irc QUIT :Ping timeout: 2m30s")
+		line := ":chatto!~chatto-irc@9qt4sazudxvsk.irc QUIT :Ping timeout: 2m30s"
+		msg := parseLine(line)
+		assert.Equal(line, msg.Raw)
 		assert.Equal("chatto!~chatto-irc@9qt4sazudxvsk.irc", msg.Src)
 		assert.Equal("chatto", msg.Nick)
 		assert.Equal("~chatto-irc", msg.Ident)
