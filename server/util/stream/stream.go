@@ -20,8 +20,12 @@ func (s *Stream) Observe(key interface{}) (<-chan Item, int) {
 	return s.observable(key).Observe()
 }
 
-func (s *Stream) ObserveFunc(ctx context.Context, key interface{}, handler ObserverFunc) *Observer {
-	return s.observable(key).ObserveFunc(ctx, handler)
+func (s *Stream) Once(ctx context.Context, key interface{}, handler ObserverFunc) *Observer {
+	return s.observable(key).Once(ctx, handler)
+}
+
+func (s *Stream) Each(ctx context.Context, key interface{}, handler ObserverFunc) *Observer {
+	return s.observable(key).Each(ctx, handler)
 }
 
 func (s *Stream) Notify(key interface{}, item Item) {

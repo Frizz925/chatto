@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -45,19 +46,56 @@ func serve(ctx context.Context, cfg Config) error {
 		log.Infof("Connected to IRC server %s", cfg.Addr)
 	})
 	conn.Each(ctx, irc.JOIN, func(e irc.Event) {
-		log.Infof("Joined channel %s", cfg.Channel)
+		args := e.Message.Args
+		if len(args) < 1 {
+			return
+		}
+		channel := args[0]
+		log.Infof("Joined channel %s", channel)
+		if err := conn.Privmsg(ctx, channel, "Hello, world!"); err != nil {
+			log.Errorf("Failed to send message to %s: %+v", channel, err)
+		} else {
+			log.Infof("Sent hello message to %s", channel)
+		}
+	})
+	conn.Each(ctx, irc.INVITE, func(e irc.Event) {
+		args := e.Message.Args
+		if len(args) < 2 {
+			return
+		}
+		channel := args[1]
+		log.Infof("Invited to channel %s", channel)
+		if err := conn.Join(ctx, channel); err != nil {
+			log.Errorf("Failed to join channel %s: %+v", channel, err)
+		}
+	})
+	conn.Each(ctx, irc.KICK, func(e irc.Event) {
+		args := e.Message.Args
+		nargs := len(args)
+		if nargs < 1 {
+			return
+		}
+		channel := args[0]
+		if nargs >= 3 {
+			reason := args[2]
+			log.Infof("Kicked from channel %s (%s)", channel, reason)
+		} else {
+			log.Infof("Kicked from channel %s", channel)
+		}
+	})
+	conn.Each(ctx, irc.PRIVMSG, func(e irc.Event) {
+		nick, args := e.Message.Nick, e.Message.Args
+		if len(args) < 2 {
+			return
+		}
+		channel, message := args[0], strings.Join(args[1:], " ")
+		log.Infof("[%s] %s: %s", channel, nick, message)
 	})
 	conn.Each(ctx, irc.DISCONNECTED, func(e irc.Event) {
 		log.Infof("Disconnected from IRC server %s", cfg.Addr)
 	})
 
 	if err := conn.Connect(ctx, cfg.Addr); err != nil {
-		return err
-	}
-	if err := conn.Join(ctx, cfg.Channel); err != nil {
-		return err
-	}
-	if err := conn.Privmsg(ctx, cfg.Channel, "Hello, world!"); err != nil {
 		return err
 	}
 

@@ -38,7 +38,15 @@ func (o *Observable) Observe() (<-chan Item, int) {
 	return ch, id
 }
 
-func (o *Observable) ObserveFunc(ctx context.Context, handler ObserverFunc) *Observer {
+func (o *Observable) Once(ctx context.Context, handler ObserverFunc) *Observer {
+	onceCtx, cancel := context.WithCancel(ctx)
+	return o.Each(onceCtx, func(item Item) {
+		defer cancel()
+		handler(item)
+	})
+}
+
+func (o *Observable) Each(ctx context.Context, handler ObserverFunc) *Observer {
 	ch, id := o.Observe()
 	loopCtx, cancel := context.WithCancel(ctx)
 	observer := NewObserver(o, id, cancel)

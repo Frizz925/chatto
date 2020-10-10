@@ -5,7 +5,6 @@ import (
 	"chatto/util/stream"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -97,25 +96,15 @@ func (c *Client) Close(ctx context.Context) error {
 }
 
 func (c *Client) Once(ctx context.Context, name string, handler HandlerFunc) *stream.Observer {
-	return c.Each(ctx, name, func(event Event) {
-		defer event.Observer.Remove()
-		handler(event)
+	return c.stream.Once(ctx, name, func(item stream.Item) {
+		handler(eventFromStream(c, item))
 	})
 }
 
-func (c *Client) Each(ctx context.Context, name string, handler HandlerFunc) (obs *stream.Observer) {
-	obs = c.stream.ObserveFunc(ctx, name, func(item stream.Item) {
-		event := Event{
-			Client:   c,
-			Observer: obs,
-			Error:    item.E,
-		}
-		if message, ok := item.V.(Message); ok {
-			event.Message = message
-		}
-		handler(event)
+func (c *Client) Each(ctx context.Context, name string, handler HandlerFunc) *stream.Observer {
+	return c.stream.Each(ctx, name, func(item stream.Item) {
+		handler(eventFromStream(c, item))
 	})
-	return obs
 }
 
 func (c *Client) Remove(name string, id int) {
@@ -139,7 +128,7 @@ func (c *Client) init(rw io.ReadWriter) error {
 
 	c.Each(ctx, PING, func(e Event) {
 		if err := e.Client.Pong(ctx, c.cfg.Nick); err != nil {
-			log.Errorf("Error replying PING %+v", err)
+			log.Errorf("Error replying PING: %+v", err)
 		}
 	})
 
@@ -211,12 +200,10 @@ func (c *Client) send(ctx context.Context, w io.Writer) {
 }
 
 func (c *Client) handleLine(line string) {
-	fmt.Println(line)
 	msg := parseLine(line)
-	if msg.Cmd == "" {
-		return
+	if msg.Cmd != "" {
+		c.notify(msg.Cmd, msg)
 	}
-	c.notify(msg.Cmd, msg)
 }
 
 func (c *Client) handleError(err error) {
