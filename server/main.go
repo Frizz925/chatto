@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -36,34 +37,41 @@ func main() {
 }
 
 func serve(ctx context.Context, cfg Config) error {
-	c := irc.NewClient(irc.Config{
+	conn := irc.NewConn(irc.Config{
 		Nick: cfg.Nick,
 	})
 
-	if err := c.Connect(ctx, cfg.Addr); err != nil {
+	conn.Each(ctx, irc.CONNECTED, func(e irc.Event) {
+		log.Infof("Connected to IRC server %s", cfg.Addr)
+	})
+	conn.Each(ctx, irc.JOIN, func(e irc.Event) {
+		log.Infof("Joined channel %s", cfg.Channel)
+	})
+	conn.Each(ctx, irc.DISCONNECTED, func(e irc.Event) {
+		log.Infof("Disconnected from IRC server %s", cfg.Addr)
+	})
+
+	if err := conn.Connect(ctx, cfg.Addr); err != nil {
 		return err
 	}
-	defer c.Close(ctx)
-	log.Infof("Connected to IRC server %s", cfg.Addr)
-
-	if err := c.Join(ctx, cfg.Channel); err != nil {
+	if err := conn.Join(ctx, cfg.Channel); err != nil {
 		return err
 	}
-	log.Infof("Joined channel %s", cfg.Channel)
-
-	for {
-		line, err := c.Read(ctx)
-		if err != nil {
-			switch err {
-			case context.Canceled:
-				return nil
-			case context.DeadlineExceeded:
-				return nil
-			}
-			return err
-		}
-		log.Info(line)
+	if err := conn.Privmsg(ctx, cfg.Channel, "Hello, world!"); err != nil {
+		return err
 	}
+
+	<-ctx.Done()
+
+	log.Info("Terminating connection...")
+	closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := conn.Close(closeCtx); err != nil {
+		return err
+	}
+	log.Info("Connection terminated.")
+
+	return nil
 }
 
 func init() {

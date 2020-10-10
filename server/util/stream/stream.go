@@ -6,24 +6,64 @@ import (
 )
 
 type Stream struct {
-	ctx    context.Context
-	mu     sync.Mutex
+	mu     sync.RWMutex
 	topics map[interface{}]*Observable
 }
 
-func NewStream(ctx context.Context) *Stream {
+func NewStream() *Stream {
 	return &Stream{
-		ctx:    ctx,
 		topics: make(map[interface{}]*Observable),
 	}
 }
 
-func (s *Stream) Topic(key interface{}) *Observable {
+func (s *Stream) Observe(key interface{}) (<-chan Item, int) {
+	return s.observable(key).Observe()
+}
+
+func (s *Stream) ObserveFunc(ctx context.Context, key interface{}, handler ObserverFunc) *Observer {
+	return s.observable(key).ObserveFunc(ctx, handler)
+}
+
+func (s *Stream) Notify(key interface{}, item Item) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	obs, ok := s.topics[key]
+	if ok {
+		obs.Notify(item)
+	}
+}
+
+func (s *Stream) Remove(key interface{}, id int) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	obs, ok := s.topics[key]
+	if ok {
+		obs.Remove(id)
+	}
+}
+
+func (s *Stream) Open() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, obs := range s.topics {
+		obs.Open()
+	}
+}
+
+func (s *Stream) Close() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, obs := range s.topics {
+		obs.Close()
+	}
+}
+
+func (s *Stream) observable(key interface{}) *Observable {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	obs, ok := s.topics[key]
 	if !ok {
-		obs = NewObservable(s.ctx)
+		obs = NewObservable()
 		s.topics[key] = obs
 	}
 	return obs
